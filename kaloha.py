@@ -130,25 +130,23 @@ def crear_dataset_l(n_datos, channel=False, bps=1e6, t_pkt="exp", delay=0, n_nod
         S.push(Event(delay + epsilon, "intra_slot", -1), delay + epsilon)
 
         t = 0
-        while t < .75 * tam_s:
+        while t < 250:
             e = S.pop()
             t = e.tiempo
             n = e.nodo
             tipo = e.tipo
 
-            if tipo == "intra_slot":
-                S.push(Event(t + slot + delay + epsilon, "intra_slot", -1), t + slot + delay + epsilon)
-                for x in nodos:
-                    if x.nodo in set(nodo_tx):
-                        x.push_state(1)
-                    else:
-                        x.push_state(0)
-                val = C.estado(channel)
-                state.push(val)  # True 3 estados en el canal, False 2 estados en el canal
-                nodo_tx.clear()
-
             if tipo == "FinSlot":
                 if nodos[n].fin_slot(t, S):
+                    if n == 0:
+                        for x in nodos:
+                            if x in set(nodo_tx):
+                                x.push_state(1)
+                            else:
+                                x.push_state(0)
+                        nodos_tx.clear()
+                        val = C.estado(channel)
+                        state.push(val)
                     if nodos[n].start_tx(t, S):
                         C.ocupar()
                         nodo_tx.append(n)
@@ -175,6 +173,15 @@ def crear_dataset_l(n_datos, channel=False, bps=1e6, t_pkt="exp", delay=0, n_nod
 
             if tipo == "ACK":
                 nodos[n].set_AckT(t)
+                if n == 0:
+                    for x in nodos:
+                        if x in set(nodo_tx):
+                            x.push_state(1)
+                        else:
+                            x.push_state(0)
+                    nodos_tx.clear()
+                    val = C.estado(channel)
+                    state.push(val)
                 if nodos[n].start_tx(t, S):
                     C.ocupar()
                     nodo_tx.append(n)
@@ -187,19 +194,17 @@ def crear_dataset_l(n_datos, channel=False, bps=1e6, t_pkt="exp", delay=0, n_nod
             n = e.nodo
             tipo = e.tipo
 
-            if tipo == "intra_slot":
-                S.push(Event(t + slot + delay + epsilon, "intra_slot", -1), t + slot + delay + epsilon)
-                for x in nodos:
-                    if x.nodo in set(nodo_tx):
-                        x.push_state(1)
-                    else:
-                        x.push_state(0)
-                val = C.estado(channel)
-                state.push(val)  # True 3 estados en el canal, False 2 estados en el canal
-                nodo_tx.clear()
-
             if tipo == "FinSlot":
                 if nodos[n].fin_slot(t, S):
+                    if n == 0:
+                        for x in nodos:
+                            if x in set(nodo_tx):
+                                x.push_state(1)
+                            else:
+                                x.push_state(0)
+                        nodos_tx.clear()
+                        val = C.estado(channel)
+                        state.push(val)
                     if nodos[n].start_tx(t, S):
                         C.ocupar()
                         nodo_tx.append(n)
@@ -227,6 +232,15 @@ def crear_dataset_l(n_datos, channel=False, bps=1e6, t_pkt="exp", delay=0, n_nod
 
             if tipo == "ACK":
                 nodos[n].set_AckT(t)
+                if n == 0:
+                    for x in nodos:
+                        if x in set(nodo_tx):
+                            x.push_state(1)
+                        else:
+                            x.push_state(0)
+                    nodos_tx.clear()
+                    val = C.estado(channel)
+                    state.push(val)
                 if nodos[n].start_tx(t, S):
                     C.ocupar()
                     nodo_tx.append(n)
@@ -266,10 +280,11 @@ def crear_dataset_nn(n_datos, channel=False, bps=1e6, t_pkt="exp", delay=0, n_no
 
         nodos = []
         state = State(i)
+        nodos_tx = []
 
         for x in range(n_nodos):
             len_pkt = l_pkt[t_pkt](bps)
-            nodos.append(KNetDev(bps, len_pkt, delay, x, slot, n_states=i + 1))
+            nodos.append(KNetDev(bps, len_pkt, delay, x, slot, n_states=i))
             nodos[-1].set_prob(p)
 
         C.reset()
@@ -285,7 +300,7 @@ def crear_dataset_nn(n_datos, channel=False, bps=1e6, t_pkt="exp", delay=0, n_no
             S.push(Event(slot, "FinSlot", x.nodo), slot)
 
         t = 0
-        while t < tam_s:
+        while t < 250:
             e = S.pop()
             t = e.tiempo
             n = e.nodo
@@ -295,16 +310,18 @@ def crear_dataset_nn(n_datos, channel=False, bps=1e6, t_pkt="exp", delay=0, n_no
                 if nodos[n].fin_slot(t, S):
                     if n == 0:
                         for x in nodos:
-                            x.n_pkts = 0
+                            if x in set(nodo_tx):
+                                x.push_state(1)
+                            else:
+                                x.push_state(0)
+                        nodos_tx.clear()
                         val = C.estado(channel)
                         state.push(val)
-                    var = 0
                     if nodos[n].start_tx(t, S):
-                        for x in nodos:
+                        for x in set(nodo_tx):
                             x.n_pkts += 1
-                        var = 1
+                        nodos_tx.append(n)
                         C.ocupar()
-                    nodos[n].push_state(var)
 
             if tipo == "StartTx":
                 nodos[n].set_pkt_snd(True)
@@ -322,24 +339,25 @@ def crear_dataset_nn(n_datos, channel=False, bps=1e6, t_pkt="exp", delay=0, n_no
                 if nodos[n].finish_rx(C) == 1:
                     # enviamos ack
                     for x in nodos:
-                        S.push(Event(t + nodos[n].delay + 1 / bps, "ACK", x.nodo), t + nodos[
-                            n].delay + 1 / bps)  # Le sumamos 1/bps xq es lo que restamos para que no se coordinen con lso finales de slot
+                        S.push(Event(t + nodos[n].delay + 1 / bps, "ACK", x.nodo), t + nodos[n].delay + 1 / bps)  # Le sumamos 1/bps xq es lo que restamos para que no se coordinen con lso finales de slot
                 C.desocupar()
 
             if tipo == "ACK":
                 nodos[n].set_AckT(t)
                 if n == 0:
                     for x in nodos:
-                        x.n_pkts = 0
+                        if x in set(nodo_tx):
+                            x.push_state(1)
+                        else:
+                            x.push_state(0)
+                    nodos_tx.clear()
                     val = C.estado(channel)
                     state.push(val)
-                var = 0
                 if nodos[n].start_tx(t, S):
-                    for x in nodos:
+                    for x in set(nodo_tx):
                         x.n_pkts += 1
-                    var = 1
+                    nodos_tx.append(n)
                     C.ocupar()
-                nodos[n].push_state(var)
                 S.push(Event(t + slot, "FinSlot", n), t + slot)
 
         m = 0
@@ -356,17 +374,19 @@ def crear_dataset_nn(n_datos, channel=False, bps=1e6, t_pkt="exp", delay=0, n_no
                 if nodos[n].fin_slot(t, S):
                     if n == 0:
                         for x in nodos:
-                            x.n_pkts = 0
+                            if x in set(nodo_tx):
+                                x.push_state(1)
+                            else:
+                                x.push_state(0)
+                        nodos_tx.clear()
                         val = C.estado(channel)
                         state.push(val)
-                    var = 0
-                    if nodos[n].start_tx(t, S):
-                        S.push(Event(t + 1 / bps, "IntraSlot", n), t + 1 / bps)
-                        for x in nodos:
+                    if nodos[n].start_tx(t, S):                        
+                        for x in set(nodo_tx):
                             x.n_pkts += 1
-                        var = 1
+                        S.push(Event(t + 1 / bps, "IntraSlot", n), t + 1 / bps)
+                        nodos_tx.append(n)
                         C.ocupar()
-                    nodos[n].push_state(var)
 
             if tipo == "StartTx":
                 m += 1
@@ -391,17 +411,20 @@ def crear_dataset_nn(n_datos, channel=False, bps=1e6, t_pkt="exp", delay=0, n_no
             if tipo == "ACK":
                 if n == 0:
                     for x in nodos:
-                        x.n_pkts = 0
+                        if x in set(nodo_tx):
+                            x.push_state(1)
+                        else:
+                            x.push_state(0)
+                    nodos_tx.clear()
                     val = C.estado(channel)
                     state.push(val)
-                var = 0
                 if nodos[n].start_tx(t, S):
-                    for x in nodos:
+                    for x in set(nodo_tx):
                         x.n_pkts += 1
-                    var = 1
+                    nodos_tx.append(n)
                     C.ocupar()
                     S.push(Event(t + 1/bps, "IntraSlot", n), t + 1/bps)
-                nodos[n].push_state(var)
+                
                 S.push(Event(t + slot, "FinSlot", n), t + slot)
 
     result = np.array(result)
